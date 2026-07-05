@@ -1,0 +1,40 @@
+.env
+node_modules
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime files
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Optional package manager directories
+.pnp
+.pnp.js
+.nvmrc
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Optional build outputs
+dist
+build
+
+# Optional IDE and editor files
+.vscode
+.idea
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test results
+coverage
