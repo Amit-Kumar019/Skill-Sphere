@@ -12,6 +12,9 @@ import VerifyEmail from "./pages/VerifyEmail";
 import Dashboard from "./pages/Dashboard";
 import ProfileSetup from "./pages/ProfileSetup";
 import Profile from "./pages/Profile";
+import Gigs from "./pages/Gigs";
+import CreateGig from "./pages/CreateGig";
+import GigDetails from "./pages/GigDetails";
 
 const App: React.FC = () => {
   return (
@@ -56,6 +59,30 @@ const App: React.FC = () => {
               element={
                 <ProtectedRoute>
                   <Profile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/gigs"
+              element={
+                <ProtectedRoute>
+                  <Gigs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/gigs/:id"
+              element={
+                <ProtectedRoute>
+                  <GigDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/create-gig"
+              element={
+                <ProtectedRoute>
+                  <CreateGig />
                 </ProtectedRoute>
               }
             />

@@ -208,9 +208,20 @@ const Dashboard: React.FC = () => {
               )}
             </div>
             
-            <Link to="/profile" className="btn btn-secondary" style={{ padding: "10px 18px", gap: "6px", border: "1px solid rgba(255,255,255,0.1)" }}>
-              <Eye size={16} /> View Profile
-            </Link>
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              {user.role === "client" ? (
+                <Link to="/create-gig" className="btn btn-primary" style={{ padding: "10px 18px", gap: "6px" }}>
+                  <Briefcase size={16} /> Post a Gig
+                </Link>
+              ) : (
+                <Link to="/gigs" className="btn btn-primary" style={{ padding: "10px 18px", gap: "6px" }}>
+                  <Briefcase size={16} /> Explore Gigs
+                </Link>
+              )}
+              <Link to="/profile" className="btn btn-secondary" style={{ padding: "10px 18px", gap: "6px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <Eye size={16} /> View Profile
+              </Link>
+            </div>
           </div>
         )}
 

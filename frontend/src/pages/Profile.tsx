@@ -347,16 +347,16 @@ const Profile: React.FC = () => {
 
         </div>
 
-        {/* Modal Drawer: Edit profile overlay */}
-        {showEdit && isOwnProfile && (
-          <EditProfile 
-            profileData={profileData} 
-            onClose={() => setShowEdit(false)} 
-            onSuccess={handleEditSuccess} 
-          />
-        )}
-
       </div>
+
+      {/* Modal Drawer: Edit profile overlay */}
+      {showEdit && isOwnProfile && (
+        <EditProfile 
+          profileData={profileData} 
+          onClose={() => setShowEdit(false)} 
+          onSuccess={handleEditSuccess} 
+        />
+      )}
     </div>
   );
 };
