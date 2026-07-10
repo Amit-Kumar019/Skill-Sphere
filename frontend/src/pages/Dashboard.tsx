@@ -1,12 +1,53 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { LogOut, User, Shield, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
+import { 
+  LogOut, User, Shield, CheckCircle2, AlertTriangle, 
+  RefreshCw, Briefcase, DollarSign, ArrowRight, Eye 
+} from "lucide-react";
 
 const Dashboard: React.FC = () => {
   const { user, logout, resendVerification } = useAuth();
+  const location = useLocation();
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isResending, setIsResending] = useState(false);
+  
+  // Profile check states
+  const [profile, setProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  // Sync state messages passed from setup wizards
+  useEffect(() => {
+    const state = location.state as { message?: string };
+    if (state?.message) {
+      setSuccess(state.message);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
+
+  // Fetch own profile on load
+  const fetchProfile = async () => {
+    try {
+      const res = await fetch("/api/v1/profile/me", { credentials: "include" });
+      const json = await res.json();
+      if (res.ok && json.data) {
+        setProfile(json.data);
+      } else {
+        setProfile(null);
+      }
+    } catch (err) {
+      setProfile(null);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user]);
 
   const handleLogout = async () => {
     await logout();
@@ -34,12 +75,12 @@ const Dashboard: React.FC = () => {
   if (!user) return null;
 
   return (
-    <div className="auth-wrapper" style={{ minHeight: "100vh", alignItems: "flex-start", paddingTop: "80px" }}>
-      <div className="glass-card" style={{ maxWidth: "800px", padding: "40px" }}>
+    <div className="auth-wrapper" style={{ minHeight: "100vh", alignItems: "flex-start", paddingTop: "80px", paddingBottom: "60px" }}>
+      <div className="glass-card" style={{ maxWidth: "850px", padding: "40px" }}>
         
         {/* Banner for Email Verification */}
         {!user.isEmailVerified && (
-          <div className="alert alert-error" style={{ marginBottom: "30px", flexDirection: "column", gap: "8px" }}>
+          <div className="alert alert-error" style={{ marginBottom: "24px", flexDirection: "column", gap: "8px" }}>
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
               <AlertTriangle size={22} style={{ flexShrink: 0 }} />
               <strong style={{ fontSize: "1rem" }}>Email Account Unverified</strong>
@@ -71,21 +112,51 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
+        {/* Profile Configuration Warning Banner */}
+        {!profileLoading && !profile && (
+          <div className="alert alert-error" style={{ 
+            marginBottom: "24px", 
+            flexDirection: "column", 
+            gap: "10px",
+            background: "rgba(99, 102, 241, 0.08)",
+            borderColor: "rgba(99, 102, 241, 0.3)",
+            color: "var(--text-main)"
+          }}>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <Briefcase size={22} style={{ color: "var(--primary)", flexShrink: 0 }} />
+              <strong style={{ fontSize: "1rem" }}>Profile Setup Required</strong>
+            </div>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+              {user.role === "freelancer"
+                ? "Configure your freelancer profile (skills, rates, and portfolio) to start bidding on jobs."
+                : "Configure your client company details to start posting gigs and hiring talent."}
+            </p>
+            <Link 
+              to="/profile-setup" 
+              className="btn btn-primary"
+              style={{ padding: "6px 14px", fontSize: "0.8rem", alignSelf: "flex-start", gap: "4px" }}
+            >
+              Complete Setup Wizard <ArrowRight size={14} />
+            </Link>
+          </div>
+        )}
+
         {/* Success / Error notification */}
         {success && (
-          <div className="alert alert-success" style={{ marginBottom: "30px" }}>
+          <div className="alert alert-success" style={{ marginBottom: "24px" }}>
             <CheckCircle2 size={20} />
             <span>{success}</span>
           </div>
         )}
 
         {error && (
-          <div className="alert alert-error" style={{ marginBottom: "30px" }}>
+          <div className="alert alert-error" style={{ marginBottom: "24px" }}>
             <AlertTriangle size={20} />
             <span>{error}</span>
           </div>
         )}
 
+        {/* Dashboard Title Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
           <div>
             <h1 style={{ fontSize: "2.25rem", color: "var(--text-main)", marginBottom: "4px" }}>
@@ -99,6 +170,49 @@ const Dashboard: React.FC = () => {
             <LogOut size={16} /> Logout
           </button>
         </div>
+
+        {/* Dynamic Profile Summary Section (If Profile Exists) */}
+        {!profileLoading && profile && (
+          <div style={{
+            background: "rgba(99, 102, 241, 0.04)",
+            border: "1px solid rgba(99, 102, 241, 0.15)",
+            borderRadius: "var(--radius-md)",
+            padding: "24px",
+            marginBottom: "24px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "20px"
+          }}>
+            <div>
+              <span style={{ color: "var(--secondary)", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 700 }}>Your Active Profile</span>
+              <h2 style={{ fontSize: "1.5rem", marginTop: "4px" }}>
+                {user.role === "freelancer" ? profile.title : profile.companyName}
+              </h2>
+              {user.role === "freelancer" ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "0.9rem", color: "var(--text-muted)", display: "inline-flex", alignItems: "center" }}>
+                    <DollarSign size={14} style={{ color: "var(--success)" }} /> {profile.hourlyRate} / hr
+                  </span>
+                  <span style={{ color: "rgba(255,255,255,0.15)" }}>&bull;</span>
+                  <span style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>
+                    {profile.skills?.slice(0, 3).join(", ")}
+                    {profile.skills?.length > 3 && "..."}
+                  </span>
+                </div>
+              ) : (
+                <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                  {profile.companyWebsite || "No website specified"}
+                </p>
+              )}
+            </div>
+            
+            <Link to="/profile" className="btn btn-secondary" style={{ padding: "10px 18px", gap: "6px", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <Eye size={16} /> View Profile
+            </Link>
+          </div>
+        )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginTop: "10px" }}>
           

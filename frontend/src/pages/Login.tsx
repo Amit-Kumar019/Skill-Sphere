@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -21,6 +21,13 @@ const Login: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Keep a ref of the active role so the Google callback can access it
+  // without having to re-initialize the Google client whenever role changes
+  const roleRef = useRef(role);
+  useEffect(() => {
+    roleRef.current = role;
+  }, [role]);
+
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
@@ -42,13 +49,20 @@ const Login: React.FC = () => {
     }
   }, [location]);
 
+  // Disable Google Auto-Select on mount to prevent login bypassing on logout
+  useEffect(() => {
+    if (window.google) {
+      window.google.accounts.id.disableAutoSelect();
+    }
+  }, []);
+
   // Google OAuth Initialization
   useEffect(() => {
     const handleGoogleCallback = async (response: any) => {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await googleAuth(response.credential, role);
+        const res = await googleAuth(response.credential, roleRef.current);
         if (res.success) {
           navigate("/dashboard");
         } else {
@@ -80,7 +94,7 @@ const Login: React.FC = () => {
         }
       );
     }
-  }, [googleAuth, navigate, role]);
+  }, [googleAuth, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
