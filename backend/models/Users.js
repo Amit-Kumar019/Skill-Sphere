@@ -143,10 +143,6 @@ const userSchema = new mongoose.Schema(
 
 
 // These are indexes these helps in the fast retriveals of the data : Jab data bada ho jata hai tab itne bade data me agar kuch search karna ho to isase time kam lagta hai
-userSchema.index({ email: 1 });
-
-userSchema.index({ username: 1 });
-
 userSchema.index({ role: 1 });
 
 userSchema.index({ "location.city": 1 });
