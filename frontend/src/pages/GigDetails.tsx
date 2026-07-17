@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { 
-  FileText, ArrowLeft, 
-  User, CheckCircle2, AlertCircle, Clock, Link as LinkIcon, Send, ShieldCheck
+  FileText, ArrowLeft, MessageSquare, CreditCard,
+  User, CheckCircle2, AlertCircle, Clock, Link as LinkIcon, Send, ShieldCheck, AlertTriangle
 } from "lucide-react";
 
 interface Attachment {
@@ -46,6 +46,7 @@ interface Proposal {
 const GigDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [gig, setGig] = useState<any>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -54,6 +55,18 @@ const GigDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Payment states
+  const [payingMilestoneId, setPayingMilestoneId] = useState<string | null>(null);
+  const [simulationModalOpen, setSimulationModalOpen] = useState(false);
+  const [simulatedTxnId, setSimulatedTxnId] = useState("");
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
+
+  // Dispute states
+  const [disputeModalOpen, setDisputeModalOpen] = useState(false);
+  const [disputeMilestoneId, setDisputeMilestoneId] = useState<string | null>(null);
+  const [disputeReason, setDisputeReason] = useState("");
+  const [disputeLoading, setDisputeLoading] = useState(false);
+
   // Proposal Form State (for Freelancers)
   const [coverLetter, setCoverLetter] = useState("");
   const [bidAmount, setBidAmount] = useState<number>(0);
@@ -61,6 +74,125 @@ const GigDetails: React.FC = () => {
   const [durUnit, setDurUnit] = useState<"Days" | "Weeks" | "Months">("Days");
   const [propAttachments, setPropAttachments] = useState<File[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+
+  const handleRaiseDispute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disputeMilestoneId || !disputeReason) return;
+    setDisputeLoading(true);
+    try {
+      const res = await fetch("/api/v1/disputes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          milestoneId: disputeMilestoneId,
+          gigId: id,
+          reason: disputeReason
+        }),
+        credentials: "include"
+      });
+      const json = await res.json();
+      if (res.ok) {
+        alert("Dispute raised successfully! Administrators have been notified.");
+        setDisputeModalOpen(false);
+        setDisputeReason("");
+        setDisputeMilestoneId(null);
+        fetchGigDetails();
+      } else {
+        alert(json.message || "Failed to raise dispute.");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDisputeLoading(false);
+    }
+  };
+
+  const handlePayMilestone = async (milestoneId: string) => {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/v1/payments/checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ milestoneId }),
+        credentials: "include"
+      });
+      const json = await res.json();
+      if (res.ok && json.data) {
+        if (json.data.isMock) {
+          setPayingMilestoneId(milestoneId);
+          setSimulationModalOpen(true);
+          setSimulatedTxnId(`txn_mock_${Date.now()}`);
+        } else {
+          // Stripe checkout redirect
+          window.location.href = json.data.url;
+        }
+      } else {
+        alert(json.message || "Failed to initiate payment session.");
+      }
+    } catch (err) {
+      console.error("Payment session error:", err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCompleteMockPayment = async () => {
+    if (!payingMilestoneId) return;
+    setPaymentProcessing(true);
+    try {
+      const res = await fetch("/api/v1/payments/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          milestoneId: payingMilestoneId,
+          transactionId: simulatedTxnId,
+          status: "Completed"
+        }),
+        credentials: "include"
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setSimulationModalOpen(false);
+        setPayingMilestoneId(null);
+        fetchGigDetails();
+      } else {
+        alert(json.message || "Failed to verify mock payment.");
+      }
+    } catch (err) {
+      console.error("Verify payment error:", err);
+    } finally {
+      setPaymentProcessing(false);
+    }
+  };
+
+  const handleStartChat = async () => {
+    if (!gig || !user) return;
+    // Determine the recipient user id
+    const recipientId = user.role === "client" 
+      ? gig.hiredFreelancer?._id 
+      : gig.client?._id;
+      
+    if (!recipientId) return;
+
+    setChatLoading(true);
+    try {
+      const res = await fetch("/api/v1/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipientId, gigId: gig._id }),
+        credentials: "include"
+      });
+      const json = await res.json();
+      if (res.ok && json.data) {
+        navigate(`/chat?chatId=${json.data._id}`);
+      }
+    } catch (err) {
+      console.error("Failed to start or get chat:", err);
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   const fetchGigDetails = async () => {
     setLoading(true);
@@ -312,15 +444,46 @@ const GigDetails: React.FC = () => {
                           Due Date: {new Date(m.dueDate).toLocaleDateString()}
                         </span>
                       </div>
-                      <div style={{ textAlign: "right" }}>
+                      <div style={{ textAlign: "right", display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-end" }}>
                         <span style={{ fontWeight: 700, color: "var(--success)", fontSize: "1.1rem", display: "block" }}>${m.amount}</span>
-                        <span style={{
-                          fontSize: "0.75rem",
-                          background: m.status === "Approved" ? "rgba(16, 185, 129, 0.15)" : "rgba(255,255,255,0.05)",
-                          color: m.status === "Approved" ? "var(--success)" : "var(--text-muted)",
-                          padding: "2px 6px",
-                          borderRadius: "4px"
-                        }}>{m.status}</span>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          <span style={{
+                            fontSize: "0.75rem",
+                            background: m.status === "Approved" ? "rgba(16, 185, 129, 0.15)" : "rgba(255,255,255,0.05)",
+                            color: m.status === "Approved" ? "var(--success)" : "var(--text-muted)",
+                            padding: "2px 6px",
+                            borderRadius: "4px"
+                          }}>{m.status}</span>
+                          <span style={{
+                            fontSize: "0.75rem",
+                            background: m.paymentStatus === "Paid" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.1)",
+                            color: m.paymentStatus === "Paid" ? "var(--success)" : "var(--error)",
+                            padding: "2px 6px",
+                            borderRadius: "4px"
+                          }}>{m.paymentStatus === "Paid" ? "Paid" : "Unpaid"}</span>
+                        </div>
+                        {isOwner && gig.status !== "Open" && m.paymentStatus !== "Paid" && (
+                          <button
+                            onClick={() => handlePayMilestone(m._id)}
+                            disabled={actionLoading}
+                            className="btn btn-primary"
+                            style={{ padding: "4px 8px", fontSize: "0.7rem", marginTop: "4px", gap: "4px", borderRadius: "4px" }}
+                          >
+                            <CreditCard size={12} /> Pay Milestone
+                          </button>
+                        )}
+                        {((isOwner) || (gig.hiredFreelancer && gig.hiredFreelancer._id === user?._id)) && m.paymentStatus === "Paid" && (
+                          <button
+                            onClick={() => {
+                              setDisputeMilestoneId(m._id);
+                              setDisputeModalOpen(true);
+                            }}
+                            className="btn btn-secondary"
+                            style={{ padding: "4px 8px", fontSize: "0.7rem", marginTop: "4px", gap: "4px", borderRadius: "4px", borderColor: "rgba(239, 68, 68, 0.4)", color: "var(--error)" }}
+                          >
+                            <AlertTriangle size={12} /> Raise Dispute
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -475,6 +638,18 @@ const GigDetails: React.FC = () => {
                     {gig.hiredFreelancer.firstName} {gig.hiredFreelancer.lastName}
                   </span>
                   <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>@{gig.hiredFreelancer.username}</span>
+                  
+                  {/* Chat button for participants */}
+                  {(isOwner || user?._id === gig.hiredFreelancer._id) && (
+                    <button 
+                      onClick={handleStartChat}
+                      disabled={chatLoading}
+                      className="btn btn-secondary btn-block"
+                      style={{ marginTop: "12px", gap: "6px", padding: "8px 12px", fontSize: "0.85rem", width: "100%" }}
+                    >
+                      {chatLoading ? <div className="spinner" style={{ width: "14px", height: "14px" }}></div> : <><MessageSquare size={14} /> Chat about Gig</>}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -628,6 +803,180 @@ const GigDetails: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Payment Simulation Modal */}
+      {simulationModalOpen && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "rgba(11, 9, 20, 0.8)",
+          backdropFilter: "blur(24px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+        }}>
+          <div className="glass-card" style={{
+            maxWidth: "480px",
+            padding: "36px",
+            border: "1px solid rgba(99, 102, 241, 0.25)",
+            boxShadow: "0 20px 50px rgba(99, 102, 241, 0.15)",
+            textAlign: "center",
+            margin: "0 20px"
+          }}>
+            <div style={{
+              width: "64px",
+              height: "64px",
+              borderRadius: "50%",
+              background: "rgba(99, 102, 241, 0.1)",
+              border: "1px solid rgba(99, 102, 241, 0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+              color: "var(--primary)"
+            }}>
+              <CreditCard size={32} />
+            </div>
+            
+            <h2 style={{ fontSize: "1.6rem", marginBottom: "8px", fontWeight: 700 }}>Stripe Secure Checkout</h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: "24px" }}>
+              Simulation payment gateway is active. Confirm the transaction to transfer the milestone amount to escrow.
+            </p>
+
+            <div style={{
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "var(--radius-md)",
+              padding: "16px",
+              textAlign: "left",
+              marginBottom: "24px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Milestone Title:</span>
+                <span style={{ fontWeight: 600, color: "var(--text-main)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {milestones.find(m => m._id === payingMilestoneId)?.title}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Amount Due:</span>
+                <span style={{ fontWeight: 700, color: "var(--success)" }}>
+                  ${milestones.find(m => m._id === payingMilestoneId)?.amount}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", borderTop: "1px solid var(--border-color)", paddingTop: "8px", marginTop: "4px" }}>
+                <span style={{ color: "var(--text-muted)" }}>Transaction ID:</span>
+                <span style={{ fontFamily: "monospace", fontSize: "0.75rem", color: "var(--text-muted)" }}>{simulatedTxnId}</span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSimulationModalOpen(false);
+                  setPayingMilestoneId(null);
+                }}
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                disabled={paymentProcessing}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCompleteMockPayment}
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                disabled={paymentProcessing}
+              >
+                {paymentProcessing ? (
+                  <>
+                    <div className="spinner" style={{ width: "16px", height: "16px" }}></div>
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  "Confirm Pay"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Dispute Modal Overlay */}
+      {disputeModalOpen && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "rgba(11, 9, 20, 0.8)",
+          backdropFilter: "blur(24px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+        }}>
+          <div className="glass-card" style={{
+            maxWidth: "480px",
+            padding: "36px",
+            margin: "0 20px"
+          }}>
+            <h2 style={{ fontSize: "1.6rem", marginBottom: "12px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+              <AlertTriangle style={{ color: "var(--error)" }} /> Raise Escrow Dispute
+            </h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "20px" }}>
+              Please specify the reason for this dispute. Our platform administrators will audit your logs and code submissions to arbitrate.
+            </p>
+
+            <form onSubmit={handleRaiseDispute}>
+              <div className="form-group">
+                <label className="form-label">Reason for Dispute</label>
+                <textarea
+                  className="form-input"
+                  placeholder="Explain clearly why you are contesting this milestone payment..."
+                  value={disputeReason}
+                  onChange={(e) => setDisputeReason(e.target.value)}
+                  style={{ paddingLeft: "12px", resize: "vertical" }}
+                  rows={4}
+                  required
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "12px", marginTop: "24px" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDisputeModalOpen(false);
+                    setDisputeReason("");
+                    setDisputeMilestoneId(null);
+                  }}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  disabled={disputeLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1, background: "var(--error)", border: "none" }}
+                  disabled={disputeLoading}
+                >
+                  {disputeLoading ? <div className="spinner" style={{ width: "16px", height: "16px" }}></div> : "File Dispute"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

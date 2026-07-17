@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { io } from "socket.io-client";
 import { 
   LogOut, User, Shield, CheckCircle2, AlertTriangle, 
-  RefreshCw, Briefcase, DollarSign, ArrowRight, Eye 
+  RefreshCw, Briefcase, DollarSign, ArrowRight, Eye,
+  Bell, Trash2, Clock, MessageSquare
 } from "lucide-react";
 
 const Dashboard: React.FC = () => {
@@ -16,6 +18,106 @@ const Dashboard: React.FC = () => {
   // Profile check states
   const [profile, setProfile] = useState<any>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+
+  // My Gigs states
+  const [myGigs, setMyGigs] = useState<any[]>([]);
+  const [gigsLoading, setGigsLoading] = useState(true);
+
+  const fetchMyGigs = async () => {
+    setGigsLoading(true);
+    try {
+      const res = await fetch("/api/v1/gigs/my-gigs", { credentials: "include" });
+      const json = await res.json();
+      if (res.ok && json.data) {
+        setMyGigs(json.data);
+      }
+    } catch (err) {
+      console.error("Error fetching my gigs:", err);
+    } finally {
+      setGigsLoading(false);
+    }
+  };
+
+  // Notification states
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch("/api/v1/notifications", { credentials: "include" });
+      const json = await res.json();
+      if (res.ok && json.data) {
+        setNotifications(json.data);
+      }
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchNotifications();
+      
+      const socket = io(window.location.origin, {
+        query: { userId: user._id }
+      });
+      
+      socket.on("connect", () => {
+        socket.emit("join_user", user._id);
+      });
+
+      socket.on("notification", (notif) => {
+        setNotifications((prev) => [notif, ...prev]);
+      });
+
+      socket.on("chat_message_notification", (data) => {
+        setNotifications((prev) => [
+          {
+            _id: `msg_${Date.now()}`,
+            title: `New message from ${data.senderName}`,
+            message: data.message,
+            type: "Message",
+            isRead: false,
+            createdAt: new Date().toISOString()
+          },
+          ...prev
+        ]);
+      });
+
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [user]);
+
+  const handleMarkAllRead = async () => {
+    try {
+      const res = await fetch("/api/v1/notifications/read-all", {
+        method: "PATCH",
+        credentials: "include"
+      });
+      if (res.ok) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteNotif = async (notifId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/v1/notifications/${notifId}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (res.ok) {
+        setNotifications((prev) => prev.filter((n) => n._id !== notifId));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Sync state messages passed from setup wizards
   useEffect(() => {
@@ -46,6 +148,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     if (user) {
       fetchProfile();
+      fetchMyGigs();
     }
   }, [user]);
 
@@ -166,9 +269,113 @@ const Dashboard: React.FC = () => {
               Manage your Skill Sphere profile credentials and account actions
             </p>
           </div>
-          <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: "10px 18px", gap: "6px" }}>
-            <LogOut size={16} /> Logout
-          </button>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", position: "relative" }}>
+            {user.role === "admin" && (
+              <Link to="/admin" className="btn btn-primary" style={{ padding: "10px 18px", gap: "6px" }}>
+                <Shield size={16} /> Admin Console
+              </Link>
+            )}
+            
+            {/* Inbox / Chat Link */}
+            <Link to="/chat" className="btn btn-secondary" style={{ padding: "10px 18px", gap: "6px" }}>
+              <MessageSquare size={16} /> Inbox
+            </Link>
+
+            {/* Notification Bell */}
+            <div style={{ position: "relative" }}>
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)} 
+                className="btn btn-secondary" 
+                style={{ padding: "10px 14px", position: "relative" }}
+              >
+                <Bell size={18} />
+                {notifications.filter(n => !n.isRead).length > 0 && (
+                  <span style={{
+                    position: "absolute",
+                    top: "-4px",
+                    right: "-4px",
+                    background: "var(--error)",
+                    color: "white",
+                    fontSize: "0.7rem",
+                    fontWeight: 700,
+                    borderRadius: "50%",
+                    width: "16px",
+                    height: "16px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}>
+                    {notifications.filter(n => !n.isRead).length}
+                  </span>
+                )}
+              </button>
+
+              {/* Dropdown menu */}
+              {showNotifications && (
+                <div className="glass-card" style={{
+                  position: "absolute",
+                  top: "50px",
+                  right: 0,
+                  width: "360px",
+                  maxHeight: "360px",
+                  overflowY: "auto",
+                  padding: "20px",
+                  zIndex: 200,
+                  border: "1px solid var(--border-color)",
+                  boxShadow: "var(--shadow-lg)"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", borderBottom: "1px solid var(--border-color)", paddingBottom: "8px" }}>
+                    <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>Notifications</span>
+                    <button 
+                      onClick={handleMarkAllRead} 
+                      style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "0.75rem", cursor: "pointer", fontWeight: 600 }}
+                    >
+                      Mark all as read
+                    </button>
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", textAlign: "center", padding: "20px 0" }}>No notifications</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", textAlign: "left" }}>
+                      {notifications.map((notif) => (
+                        <div 
+                          key={notif._id} 
+                          style={{
+                            padding: "10px",
+                            background: notif.isRead ? "rgba(255,255,255,0.01)" : "rgba(99, 102, 241, 0.05)",
+                            borderRadius: "var(--radius-sm)",
+                            border: "1px solid var(--border-color)",
+                            position: "relative",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px"
+                          }}
+                        >
+                          <button 
+                            onClick={(e) => handleDeleteNotif(notif._id, e)}
+                            style={{ position: "absolute", top: "8px", right: "8px", background: "none", border: "none", color: "var(--error)", cursor: "pointer", opacity: 0.6 }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                          
+                          <span style={{ fontSize: "0.85rem", fontWeight: 600, paddingRight: "16px" }}>{notif.title}</span>
+                          <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.3 }}>{notif.message}</p>
+                          <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <Clock size={10} /> {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: "10px 18px", gap: "6px" }}>
+              <LogOut size={16} /> Logout
+            </button>
+          </div>
         </div>
 
         {/* Dynamic Profile Summary Section (If Profile Exists) */}
@@ -317,6 +524,86 @@ const Dashboard: React.FC = () => {
           </div>
 
         </div>
+
+        {/* My Gigs Section */}
+        {user.role !== "admin" && (
+          <div style={{ marginTop: "30px", borderTop: "1px solid var(--border-color)", paddingTop: "30px" }}>
+            <h3 style={{ fontSize: "1.25rem", color: "var(--text-main)", marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <Briefcase size={18} style={{ color: "var(--primary)" }} /> 
+              {user.role === "client" ? "My Posted Gigs" : "My Active Contracts"}
+            </h3>
+
+            {gigsLoading ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: "40px" }}>
+                <div className="spinner" style={{ width: "24px", height: "24px" }}></div>
+              </div>
+            ) : myGigs.length === 0 ? (
+              <div className="glass-card" style={{ padding: "40px", textAlign: "center" }}>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.95rem" }}>
+                  {user.role === "client" 
+                    ? "You haven't posted any gigs yet." 
+                    : "You haven't been hired for any active gigs yet."}
+                </p>
+                {user.role === "client" && (
+                  <Link to="/create-gig" className="btn btn-primary" style={{ marginTop: "16px", display: "inline-flex" }}>
+                    Post Your First Gig
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+                {myGigs.map((gig) => (
+                  <div 
+                    key={gig._id}
+                    style={{
+                      background: "rgba(255,255,255,0.02)",
+                      border: "1px solid var(--border-color)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "20px",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between"
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                        <span style={{
+                          fontSize: "0.75rem",
+                          background: gig.status === "Open" ? "rgba(16, 185, 129, 0.15)" : "rgba(255,255,255,0.05)",
+                          color: gig.status === "Open" ? "var(--success)" : "var(--text-muted)",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          fontWeight: 700
+                        }}>{gig.status}</span>
+                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                          {new Date(gig.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      <h4 style={{ fontSize: "1.05rem", fontWeight: 600, color: "var(--text-main)", marginBottom: "6px" }}>
+                        {gig.title}
+                      </h4>
+                      <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", lineHeight: 1.4, marginBottom: "12px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        {gig.description}
+                      </p>
+                    </div>
+
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-color)", paddingTop: "12px", marginTop: "12px" }}>
+                        <span style={{ fontWeight: 700, color: "var(--success)", fontSize: "1rem" }}>
+                          ${gig.budget?.min} - ${gig.budget?.max}
+                        </span>
+                        <Link to={`/gigs/${gig._id}`} className="btn btn-secondary" style={{ padding: "6px 12px", fontSize: "0.75rem", gap: "4px" }}>
+                          Track Gig <ArrowRight size={12} />
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
       </div>
     </div>

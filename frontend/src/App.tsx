@@ -15,6 +15,8 @@ import Profile from "./pages/Profile";
 import Gigs from "./pages/Gigs";
 import CreateGig from "./pages/CreateGig";
 import GigDetails from "./pages/GigDetails";
+import Chat from "./pages/Chat";
+import AdminDashboard from "./pages/AdminDashboard";
 
 const App: React.FC = () => {
   return (
@@ -30,6 +32,22 @@ const App: React.FC = () => {
             <Route path="/reset-password/:token" element={<ResetPassword />} />
 
             {/* Protected Routes */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/chat"
+              element={
+                <ProtectedRoute>
+                  <Chat />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/dashboard"
               element={

@@ -1,6 +1,9 @@
 const FreelancerProfile = require("../models/FreelancerProfile");
 const ClientProfile = require("../models/ClientProfile");
 const User = require("../models/Users");
+const Portfolio = require("../models/Portfolio");
+const Verification = require("../models/Verification");
+const Availability = require("../models/Availability");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { ApiError } = require("../utils/ApiError");
 const { ApiResponse } = require("../utils/ApiResponse");
@@ -197,10 +200,177 @@ const getFreelancers = asyncHandler(async (req, res) => {
     );
 });
 
+// ========================= ADD PORTFOLIO ITEM =========================
+const addPortfolioItem = asyncHandler(async (req, res) => {
+    if (req.user.role !== "freelancer") {
+        throw new ApiError(403, "Only freelancers can add portfolio items.");
+    }
+
+    const { title, description, githubLink, liveDemo, technologies } = req.body;
+    if (!title) {
+        throw new ApiError(400, "Portfolio title is required.");
+    }
+
+    let techIds = [];
+    if (technologies) {
+        const techArray = typeof technologies === "string" 
+            ? technologies.split(",").map(t => t.trim()).filter(Boolean)
+            : technologies;
+        techIds = techArray;
+    }
+
+    // Handle portfolio images
+    let uploadedImages = [];
+    if (req.files && req.files.images) {
+        for (const file of req.files.images) {
+            const cloudinaryResponse = await uploadOnCloudinary(file.path, "skillsphere/portfolios");
+            if (cloudinaryResponse) {
+                uploadedImages.push({
+                    url: cloudinaryResponse.secure_url,
+                    public_id: cloudinaryResponse.public_id
+                });
+            }
+        }
+    }
+
+    const portfolio = await Portfolio.create({
+        freelancer: req.user._id,
+        title,
+        description: description || "",
+        technologies: techIds,
+        githubLink: githubLink || "",
+        liveDemo: liveDemo || "",
+        images: uploadedImages
+    });
+
+    return res.status(201).json(
+        new ApiResponse(201, portfolio, "Portfolio item added successfully.")
+    );
+});
+
+// ========================= DELETE PORTFOLIO ITEM =========================
+const deletePortfolioItem = asyncHandler(async (req, res) => {
+    if (req.user.role !== "freelancer") {
+        throw new ApiError(403, "Only freelancers can delete portfolio items.");
+    }
+
+    const { portfolioId } = req.params;
+    const portfolio = await Portfolio.findOne({ _id: portfolioId, freelancer: req.user._id });
+    if (!portfolio) {
+        throw new ApiError(404, "Portfolio item not found or unauthorized.");
+    }
+
+    await Portfolio.findByIdAndDelete(portfolioId);
+
+    return res.status(200).json(
+        new ApiResponse(200, null, "Portfolio item deleted successfully.")
+    );
+});
+
+// ========================= SUBMIT VERIFICATION DOCUMENTS =========================
+const submitVerificationDocs = asyncHandler(async (req, res) => {
+    if (req.user.role !== "freelancer") {
+        throw new ApiError(403, "Only freelancers can submit verification documents.");
+    }
+
+    if (!req.files || !req.files.aadhaar || !req.files.pan || !req.files.selfie) {
+        throw new ApiError(400, "Aadhaar, PAN card, and Selfie verification files are all required.");
+    }
+
+    // Upload files to Cloudinary
+    const aadhaarRes = await uploadOnCloudinary(req.files.aadhaar[0].path, "skillsphere/verifications");
+    const panRes = await uploadOnCloudinary(req.files.pan[0].path, "skillsphere/verifications");
+    const selfieRes = await uploadOnCloudinary(req.files.selfie[0].path, "skillsphere/verifications");
+
+    if (!aadhaarRes || !panRes || !selfieRes) {
+        throw new ApiError(500, "Failed to upload one or more verification files. Please try again.");
+    }
+
+    // Create or update Verification collection entry
+    const verification = await Verification.findOneAndUpdate(
+        { freelancer: req.user._id },
+        {
+            $set: {
+                freelancer: req.user._id,
+                aadhaar: { url: aadhaarRes.secure_url, public_id: aadhaarRes.public_id },
+                pan: { url: panRes.secure_url, public_id: panRes.public_id },
+                selfie: { url: selfieRes.secure_url, public_id: selfieRes.public_id },
+                status: "Pending",
+                remarks: ""
+            }
+        },
+        { new: true, upsert: true }
+    );
+
+    // Update FreelancerProfile status
+    await FreelancerProfile.findOneAndUpdate(
+        { user: req.user._id },
+        { $set: { verificationStatus: "Pending" } }
+    );
+
+    return res.status(200).json(
+        new ApiResponse(200, verification, "Verification files uploaded successfully. Pending Admin review.")
+    );
+});
+
+// ========================= UPDATE AVAILABILITY =========================
+const updateAvailability = asyncHandler(async (req, res) => {
+    if (req.user.role !== "freelancer") {
+        throw new ApiError(403, "Only freelancers can update availability.");
+    }
+
+    const { status, availableFrom, startHour, endHour, workingDays } = req.body;
+
+    const availability = await Availability.findOneAndUpdate(
+        { freelancer: req.user._id },
+        {
+            $set: {
+                freelancer: req.user._id,
+                status: status || "Available",
+                availableFrom: availableFrom ? new Date(availableFrom) : null,
+                workingHours: {
+                    start: startHour || "",
+                    end: endHour || ""
+                },
+                workingDays: workingDays || []
+            }
+        },
+        { new: true, upsert: true }
+    );
+
+    return res.status(200).json(
+        new ApiResponse(200, availability, "Availability updated successfully.")
+    );
+});
+
+// ========================= GET PORTFOLIO ITEMS =========================
+const getFreelancerPortfolio = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const portfolio = await Portfolio.find({ freelancer: id }).sort({ createdAt: -1 });
+    return res.status(200).json(
+        new ApiResponse(200, portfolio, "Portfolio fetched successfully.")
+    );
+});
+
+// ========================= GET AVAILABILITY =========================
+const getFreelancerAvailability = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const availability = await Availability.findOne({ freelancer: id });
+    return res.status(200).json(
+        new ApiResponse(200, availability, "Availability fetched successfully.")
+    );
+});
+
 module.exports = {
     getMyProfile,
     createOrUpdateProfile,
     getFreelancerProfile,
     getClientProfile,
-    getFreelancers
+    getFreelancers,
+    addPortfolioItem,
+    deletePortfolioItem,
+    submitVerificationDocs,
+    updateAvailability,
+    getFreelancerPortfolio,
+    getFreelancerAvailability
 };

@@ -1,19 +1,30 @@
 import React, { useEffect, useState } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Mail, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
+import {
+  Mail,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  Clock,
+} from "lucide-react";
 
 const VerifyEmail: React.FC = () => {
   const { verifyEmail, resendVerification } = useAuth();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const token = searchParams.get("token");
 
-  const [status, setStatus] = useState<"loading" | "success" | "error" | "prompt">("prompt");
+  const [status, setStatus] = useState<
+    "loading" | "success" | "error" | "prompt"
+  >("prompt");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [isResending, setIsResending] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
 
+  // Auto-verify if token is in URL
   useEffect(() => {
     const confirmVerification = async () => {
       if (!token) {
@@ -27,6 +38,8 @@ const VerifyEmail: React.FC = () => {
         if (res.success) {
           setStatus("success");
           setSuccess(res.message);
+          // Auto-redirect after 3 seconds
+          setTimeout(() => navigate("/dashboard"), 3000);
         } else {
           setStatus("error");
           setError(res.message);
@@ -38,12 +51,19 @@ const VerifyEmail: React.FC = () => {
     };
 
     confirmVerification();
-  }, [token, verifyEmail]);
+  }, [token, verifyEmail, navigate]);
 
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
+    if (!email.trim()) {
       setError("Please enter your email address.");
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address.");
       return;
     }
 
@@ -54,8 +74,22 @@ const VerifyEmail: React.FC = () => {
     try {
       const res = await resendVerification(email);
       if (res.success) {
-        setSuccess("Verification email has been resent successfully. Please check your inbox.");
+        setSuccess(
+          "✓ Verification email sent! Check your inbox and spam folder.",
+        );
         setEmail("");
+        setResendCountdown(60);
+
+        // Countdown timer
+        const interval = setInterval(() => {
+          setResendCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
       } else {
         setError(res.message);
       }
@@ -68,106 +102,266 @@ const VerifyEmail: React.FC = () => {
 
   return (
     <div className="auth-wrapper">
-      <div className="glass-card" style={{ textAlign: "center" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: "20px" }}>
-          <div style={{
-            background: "rgba(99, 102, 241, 0.1)",
-            padding: "16px",
-            borderRadius: "50%",
-            color: "var(--primary)"
-          }}>
-            <Mail size={32} />
+      <div className="glass-card" style={{ maxWidth: "500px", textAlign: "center" }}>
+        {/* Icon Section */}
+        <div
+          style={{
+            marginBottom: "30px",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              background:
+                status === "success"
+                  ? "rgba(16, 185, 129, 0.15)"
+                  : status === "error"
+                    ? "rgba(239, 68, 68, 0.15)"
+                    : "rgba(99, 102, 241, 0.15)",
+              padding: "20px",
+              borderRadius: "50%",
+              color:
+                status === "success"
+                  ? "var(--success)"
+                  : status === "error"
+                    ? "var(--error)"
+                    : "var(--primary)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {status === "success" ? (
+              <CheckCircle2 size={40} />
+            ) : status === "error" ? (
+              <AlertCircle size={40} />
+            ) : (
+              <Mail size={40} />
+            )}
           </div>
         </div>
 
+        {/* Loading State */}
         {status === "loading" && (
           <div>
-            <h2 style={{ fontSize: "1.75rem", marginBottom: "12px" }}>Verifying your email...</h2>
-            <div style={{ display: "flex", justifyContent: "center", margin: "24px 0" }}>
-              <div className="spinner" style={{ width: "32px", height: "32px", borderWidth: "3px" }}></div>
+            <h2
+              style={{
+                fontSize: "1.8rem",
+                fontWeight: "700",
+                marginBottom: "12px",
+                color: "var(--text-main)",
+              }}
+            >
+              Verifying your email...
+            </h2>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                margin: "30px 0",
+              }}
+            >
+              <div className="spinner" style={{ width: "40px", height: "40px", borderWidth: "3px", borderTopColor: "var(--primary)" }} />
             </div>
-            <p style={{ color: "var(--text-muted)" }}>Please wait while we confirm your verification token.</p>
+            <p style={{ color: "var(--text-muted)", lineHeight: "1.6" }}>
+              Please wait while we confirm your verification token...
+            </p>
           </div>
         )}
 
+        {/* Success State */}
         {status === "success" && (
           <div>
-            <h2 style={{ fontSize: "1.75rem", color: "var(--success)", marginBottom: "12px" }}>Email Verified!</h2>
-            <p style={{ color: "var(--text-muted)", marginBottom: "24px" }}>
-              Thank you for verifying your email address. Your account is now fully active.
+            <h2
+              style={{
+                fontSize: "1.8rem",
+                fontWeight: "700",
+                marginBottom: "12px",
+                color: "var(--success)",
+              }}
+            >
+              Email Verified! 🎉
+            </h2>
+            <p
+              style={{ color: "var(--text-muted)", marginBottom: "24px", lineHeight: "1.6" }}
+            >
+              Thank you for verifying your email address. Your account is now
+              fully active and ready to use.
             </p>
-            {success && (
-              <div className="alert alert-success" style={{ justifyContent: "center" }}>
-                <CheckCircle2 size={20} />
-                <span>{success}</span>
-              </div>
-            )}
-            <Link to="/dashboard" className="btn btn-primary btn-block" style={{ display: "inline-flex" }}>
-              Go to Dashboard
+            <div className="alert alert-success">
+              <CheckCircle2 size={20} style={{ flexShrink: 0 }} />
+              <span>{success}</span>
+            </div>
+            <Link to="/dashboard" className="btn btn-primary btn-block">
+              Go to Dashboard →
             </Link>
+            <p
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "0.8rem",
+                marginTop: "16px",
+              }}
+            >
+              Redirecting automatically in 3 seconds...
+            </p>
           </div>
         )}
 
+        {/* Error State */}
         {status === "error" && (
           <div>
-            <h2 style={{ fontSize: "1.75rem", color: "var(--error)", marginBottom: "12px" }}>Verification Failed</h2>
-            <p style={{ color: "var(--text-muted)", marginBottom: "24px" }}>
-              The verification link was invalid or may have expired. You can request a new verification email below.
+            <h2
+              style={{
+                fontSize: "1.8rem",
+                fontWeight: "700",
+                marginBottom: "12px",
+                color: "var(--error)",
+              }}
+            >
+              Verification Failed
+            </h2>
+            <p
+              style={{ color: "var(--text-muted)", marginBottom: "24px", lineHeight: "1.6" }}
+            >
+              The verification link was invalid, expired, or already used.
+              Request a new verification email below to try again.
             </p>
             {error && (
-              <div className="alert alert-error" style={{ justifyContent: "center" }}>
-                <AlertCircle size={20} />
+              <div className="alert alert-error">
+                <AlertCircle size={20} style={{ flexShrink: 0 }} />
                 <span>{error}</span>
               </div>
             )}
           </div>
         )}
 
+        {/* Prompt State */}
         {status === "prompt" && (
           <div>
-            <h2 style={{ fontSize: "1.75rem", marginBottom: "12px" }}>Verify your Email</h2>
-            <p style={{ color: "var(--text-muted)", marginBottom: "24px" }}>
-              Please check your email inbox and click the verification link we sent to activate your account.
+            <h2
+              style={{
+                fontSize: "1.8rem",
+                fontWeight: "700",
+                marginBottom: "12px",
+                color: "var(--text-main)",
+              }}
+            >
+              Verify Your Email
+            </h2>
+            <p
+              style={{ color: "var(--text-muted)", marginBottom: "24px", lineHeight: "1.6" }}
+            >
+              We've sent a verification link to your email address. Please check
+              your inbox (and spam folder) and click the link to verify.
             </p>
+            {error && (
+              <div className="alert alert-error">
+                <AlertCircle size={20} style={{ flexShrink: 0 }} />
+                <span>{error}</span>
+              </div>
+            )}
             {success && (
-              <div className="alert alert-success" style={{ justifyContent: "center" }}>
-                <CheckCircle2 size={20} />
+              <div className="alert alert-success">
+                <CheckCircle2 size={20} style={{ flexShrink: 0 }} />
                 <span>{success}</span>
               </div>
             )}
-            {error && (
-              <div className="alert alert-error" style={{ justifyContent: "center" }}>
-                <AlertCircle size={20} />
-                <span>{error}</span>
-              </div>
-            )}
           </div>
         )}
 
+        {/* Resend Form - shown for error and prompt states */}
         {(status === "error" || status === "prompt") && (
-          <form onSubmit={handleResend} style={{ marginTop: "24px", borderTop: "1px solid var(--border-color)", paddingTop: "24px" }}>
+          <form
+            onSubmit={handleResend}
+            style={{
+              marginTop: "30px",
+              paddingTop: "30px",
+              borderTop: "1px solid var(--border-color)",
+            }}
+          >
+            <p
+              style={{
+                fontSize: "0.9rem",
+                color: "var(--text-muted)",
+                marginBottom: "16px",
+                fontWeight: "500",
+              }}
+            >
+              Didn't receive the email? Resend it:
+            </p>
+
             <div className="form-group">
-              <label className="form-label">Resend Verification Email</label>
               <div className="input-wrapper">
                 <input
                   type="email"
-                  className="form-input"
-                  placeholder="Enter your registered email"
+                  placeholder="Enter your email address"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={isResending}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError(null);
+                  }}
+                  disabled={isResending || resendCountdown > 0}
+                  className="form-input"
                   style={{ paddingLeft: "16px" }}
                 />
               </div>
             </div>
-            <button type="submit" className="btn btn-secondary btn-block" disabled={isResending}>
-              {isResending ? <RefreshCw className="spinner" size={18} /> : "Send Link"}
+
+            <button
+              type="submit"
+              disabled={isResending || resendCountdown > 0}
+              className="btn btn-primary btn-block"
+              style={{ marginTop: "16px" }}
+            >
+              {isResending ? (
+                <>
+                  <div className="spinner" />
+                  <span>Sending...</span>
+                </>
+              ) : resendCountdown > 0 ? (
+                <>
+                  <Clock size={16} />
+                  <span>Resend in {resendCountdown}s</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={16} />
+                  <span>Resend Verification Email</span>
+                </>
+              )}
             </button>
+
+            <p
+              style={{
+                fontSize: "0.8rem",
+                color: "var(--text-muted)",
+                marginTop: "16px",
+              }}
+            >
+              Check your spam/junk folder if you don't see the email
+            </p>
           </form>
         )}
 
-        <div className="auth-footer" style={{ marginTop: "28px" }}>
-          Already verified? <Link to="/login" style={{ fontWeight: 700 }}>Log In</Link>
+        {/* Footer Links */}
+        <div
+          style={{
+            marginTop: "24px",
+            paddingTop: "24px",
+            borderTop: "1px solid var(--border-color)",
+            display: "flex",
+            justifyContent: "center",
+            gap: "24px",
+            fontSize: "0.9rem",
+          }}
+        >
+          <Link to="/login" style={{ color: "var(--primary)", fontWeight: "600" }}>
+            Back to Login
+          </Link>
+          <Link to="/signup" style={{ color: "var(--primary)", fontWeight: "600" }}>
+            Create Account
+          </Link>
         </div>
       </div>
     </div>
