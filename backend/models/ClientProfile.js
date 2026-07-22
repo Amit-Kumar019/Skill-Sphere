@@ -71,7 +71,6 @@ const clientProfileSchema = new mongoose.Schema(
 
 
 // indexs
-clientProfileSchema.index({ user: 1 });
 
 clientProfileSchema.index({ companyName: 1 });
 

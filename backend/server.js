@@ -1,4 +1,5 @@
 require("dotenv").config();
+// Environment loaded
 
 const express = require("express");
 const http = require("http");
@@ -45,6 +46,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+const { errorHandler } = require("./middleware/error.middleware");
+
 // Routes
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/profile", profileRouter);
@@ -63,6 +66,9 @@ app.get("/", (req, res) => {
     message: "Server is running successfully!",
   });
 });
+
+// Global Error Handler Middleware
+app.use(errorHandler);
 
 // Socket Connection handling
 io.on("connection", (socket) => {

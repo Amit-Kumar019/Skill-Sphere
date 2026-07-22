@@ -51,7 +51,4 @@ const availabilitySchema = new mongoose.Schema(
     }
 );
 
-availabilitySchema.index({ freelancer: 1 });
-availabilitySchema.index({ status: 1 });
-
 module.exports = mongoose.model("Availability", availabilitySchema);

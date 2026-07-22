@@ -48,7 +48,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         credentials: "include", // Essential to send cookies
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get("content-type");
+      let data: any = {};
+
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        if (!response.ok) {
+          throw new Error(`Server error (${response.status}). Please try again later.`);
+        }
+        const text = await response.text();
+        data = { message: text };
+      }
+
       if (!response.ok) {
         throw new Error(data.message || "Something went wrong.");
       }

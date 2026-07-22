@@ -38,14 +38,23 @@ const sendEmail = async (options) => {
         html: options.html,
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    try {
+        const info = await transporter.sendMail(mailOptions);
 
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-        console.log("Email Sent successfully!");
-        console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+        if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+            console.log(`[SMTP] Email sent successfully to ${options.email}. Message ID: ${info.messageId}`);
+        } else {
+            console.log("================ ETHEREAL MAIL DEV CREDS ================");
+            console.log("Email Sent successfully to:", options.email);
+            console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+            console.log("========================================================");
+        }
+
+        return info;
+    } catch (error) {
+        console.error("[SMTP ERROR] Failed to send email:", error.message || error);
+        throw error;
     }
-
-    return info;
 };
 
 module.exports = sendEmail;

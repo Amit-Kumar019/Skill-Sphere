@@ -46,7 +46,4 @@ const verificationSchema = new mongoose.Schema(
     }
 );
 
-verificationSchema.index({ freelancer: 1 });
-verificationSchema.index({ status: 1 });
-
 module.exports = mongoose.model("Verification", verificationSchema);
