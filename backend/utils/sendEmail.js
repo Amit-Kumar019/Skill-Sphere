@@ -11,6 +11,7 @@ const sendEmail = async (options) => {
             host: process.env.SMTP_HOST || "smtp.gmail.com",
             port: smtpPort,
             secure: isSecure, // true for 465, false for 587
+            family: 4, // Force IPv4 resolution to prevent ENETUNREACH on cloud environments like Render
             auth: {
                 user: process.env.SMTP_USER,
                 pass: process.env.SMTP_PASS,
