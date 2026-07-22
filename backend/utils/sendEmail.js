@@ -4,14 +4,20 @@ const sendEmail = async (options) => {
     let transporter;
 
     if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+        const smtpPort = parseInt(process.env.SMTP_PORT) || 465;
+        const isSecure = smtpPort === 465 || process.env.SMTP_SECURE === "true";
+
         transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: parseInt(process.env.SMTP_PORT) || 587,
-            secure: process.env.SMTP_PORT === "465",
+            host: process.env.SMTP_HOST || "smtp.gmail.com",
+            port: smtpPort,
+            secure: isSecure, // true for 465, false for 587
             auth: {
                 user: process.env.SMTP_USER,
                 pass: process.env.SMTP_PASS,
             },
+            connectionTimeout: 10000, // 10 seconds connection timeout
+            greetingTimeout: 5000,
+            socketTimeout: 10000,
         });
     } else {
         // Fallback: Create an Ethereal account automatically if no SMTP settings are provided
